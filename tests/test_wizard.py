@@ -96,14 +96,15 @@ class WizardByTypeSubloopTests(unittest.TestCase):
 
     def test_add_rule_via_subloop(self) -> None:
         # Start from Minimal, refine, go to section 5 (byType), enable,
-        # keep default conflict resolution, add rule TTimer -> tmr, done,
-        # then Save & exit.
+        # keep default conflict resolution, keep skipVisualComponents at
+        # its default (safe), add rule TTimer -> tmr, done, Save & exit.
         script = "\n".join([
             "1",          # Minimal profile
             "y",          # refine
             "5",          # section: byType
             "y",          # enable
             "",           # conflictResolution default
+            "",           # skipVisualComponents default (true)
             "a",          # action: add
             "TTimer",     # typePattern
             "tmr",        # prefix
@@ -131,6 +132,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "5",          # byType section
             "",           # keep enabled=Y default
             "",           # keep default conflictResolution
+            "",           # keep skipVisualComponents default
             "r",          # remove
             "1",          # rule number 1 (TButton)
             "d",          # done
@@ -157,6 +159,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "5",            # byType
             "y",            # enable
             "",             # default conflictResolution
+            "",             # skipVisualComponents default
             "a",            # add
             "T(unclosed",   # BAD regex
             "TFoo",         # OK regex
@@ -184,6 +187,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "5",          # byType
             "y",          # enable
             "",           # default conflictResolution
+            "",           # skipVisualComponents default
             "a",          # add
             "TFoo",       # regex
             "123bad",     # invalid pascal ident
@@ -197,6 +201,71 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             rc, captured = _run(script, out)
             self.assertEqual(rc, 0)
         self.assertIn("not a valid Pascal identifier", captured)
+
+
+class WizardSkipVisualComponentsTests(unittest.TestCase):
+    """The form-safety prompt only fires when classField or byType is enabled."""
+
+    def test_prompt_defaults_to_true_through_field_prefix(self) -> None:
+        # Start from Minimal, refine, go to section 4 (class-field prefix),
+        # enable it, keep default prefix + capitalize + skipVisualComponents.
+        script = "\n".join([
+            "1",          # Minimal
+            "y",          # refine
+            "4",          # class-field prefix section
+            "y",          # enable classField
+            "",           # default prefix = 'F'
+            "",           # default capitalize = yes
+            "",           # skipVisualComponents default (true)
+            "11",         # Save & exit
+            "",
+        ])
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "cfg.json"
+            rc, _ = _run(script, out)
+            self.assertEqual(rc, 0)
+            with out.open() as f:
+                saved = json.load(f)
+        self.assertTrue(saved["variablePrefix"]["skipVisualComponents"])
+
+    def test_prompt_can_opt_out(self) -> None:
+        script = "\n".join([
+            "1",          # Minimal
+            "y",          # refine
+            "4",          # class-field prefix
+            "y",          # enable classField
+            "",           # default prefix
+            "",           # default capitalize
+            "n",          # NO, don't skip form classes — we want the sync on
+            "11",         # Save & exit
+            "",
+        ])
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "cfg.json"
+            rc, _ = _run(script, out)
+            self.assertEqual(rc, 0)
+            with out.open() as f:
+                saved = json.load(f)
+        self.assertFalse(saved["variablePrefix"]["skipVisualComponents"])
+        # Internal wizard marker must NOT leak into the saved config.
+        self.assertNotIn("_skipVisualComponents_asked", saved["variablePrefix"])
+
+    def test_not_asked_when_no_rename_features_enabled(self) -> None:
+        # If the user never enables classField/byType, the prompt isn't fired.
+        # We verify this by NOT supplying an answer for it — the wizard would
+        # hang otherwise, and the test would deadlock.
+        script = "\n".join([
+            "1",          # Minimal
+            "y",          # refine
+            "4",          # class-field prefix section
+            "n",          # decline classField
+            "11",         # Save & exit
+            "",
+        ])
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "cfg.json"
+            rc, _ = _run(script, out)
+            self.assertEqual(rc, 0)
 
 
 class WizardPreviewTests(unittest.TestCase):

@@ -55,6 +55,15 @@ TYPE_LIKE: frozenset[str] = BUILTIN_TYPES | {
     "ttabsheet", "tdatasource", "tdataset", "tquery", "ttable",
 }
 
+# Base classes of a "form" — a PAS unit whose class inherits from one of
+# these is paired with a `.dfm` (or `.fmx` / `.lfm`) resource file at design
+# time, and renaming its fields without updating the resource file breaks
+# the visual binding. The formatter treats these specially: see
+# ``variablePrefix.skipVisualComponents`` and ``format_pas_with_dfm``.
+VISUAL_COMPONENT_BASES: frozenset[str] = frozenset({
+    "tform", "tframe", "tdatamodule", "tcustomform",
+})
+
 
 def is_keyword(word: str) -> bool:
     """True if *word* is a reserved word (case-insensitive)."""
@@ -72,3 +81,8 @@ def is_builtin_type(word: str) -> bool:
 def is_keyword_or_directive(word: str) -> bool:
     w = word.lower()
     return w in RESERVED_WORDS or w in DIRECTIVES
+
+
+def is_visual_form_base(word: str) -> bool:
+    """True if *word* is a known VCL/FMX form base class (case-insensitive)."""
+    return word.lower() in VISUAL_COMPONENT_BASES

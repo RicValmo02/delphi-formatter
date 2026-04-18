@@ -295,6 +295,44 @@ def _section_local_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
     )
 
 
+def _ask_skip_visual_components(io_: _IO, cfg: dict[str, Any]) -> None:
+    """Safety prompt for VCL form classes.
+
+    Renaming a field of a ``TForm``/``TFrame``/``TDataModule`` class silently
+    breaks the binding with the sibling ``.dfm`` unless the DFM is patched
+    too. This flag controls both escape hatches:
+
+    - ``True``  — form classes are skipped entirely; DFMs never touched.
+    - ``False`` — form classes are renamed AND the matching DFM is rewritten
+      in sync. Requires the textual DFM format (binary DFMs are rejected).
+
+    Idempotent: we only re-ask if the flag is still at its default (True),
+    so a user bouncing between the field-prefix and byType sections only
+    sees this once.
+    """
+    vp = cfg.setdefault("variablePrefix", {})
+    # Only ask the first time. After the user has answered once, their choice
+    # stays. A wizard user who actually wants to change it can re-run.
+    if "_skipVisualComponents_asked" in vp:
+        return
+    io_.writeln(
+        "\n  -- VCL form safety --\n"
+        "  In VCL projects, renaming a form field (TForm/TFrame/TDataModule)\n"
+        "  also requires updating the matching .dfm — otherwise the visual\n"
+        "  binding breaks at runtime.\n"
+        "  'Yes' (safe default): form classes are left alone — their fields\n"
+        "  are NEVER renamed, DFMs are NEVER touched.\n"
+        "  'No':                 form fields are renamed AND the sibling .dfm\n"
+        "  is patched to keep the pair in sync."
+    )
+    vp["skipVisualComponents"] = _ask_yes_no(
+        io_,
+        "Skip form classes when renaming fields? (recommended: yes)",
+        bool(vp.get("skipVisualComponents", True)),
+    )
+    vp["_skipVisualComponents_asked"] = True
+
+
 def _section_field_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
     io_.writeln("\n== Class/record field prefix ==")
     node = cfg["variablePrefix"]["classField"]
@@ -312,6 +350,7 @@ def _section_field_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
         f"(on: '{node['prefix']}Counter', off: '{node['prefix']}counter')",
         bool(node.get("capitalizeAfterPrefix", True)),
     )
+    _ask_skip_visual_components(io_, cfg)
 
 
 def _print_byType_rules(io_: _IO, rules: list[dict[str, str]]) -> None:
@@ -345,6 +384,10 @@ def _section_bytype(io_: _IO, cfg: dict[str, Any]) -> None:
         ["typePrefixOverridesScope", "scopePrefixOverridesType"],
         node.get("conflictResolution", "typePrefixOverridesScope"),
     )
+
+    # byType rules can hit TButton/TEdit/... inside form classes just as
+    # easily as classField rules, so the same safety prompt applies.
+    _ask_skip_visual_components(io_, cfg)
 
     rules: list[dict[str, str]] = list(node.get("rules", []))
     while True:
@@ -641,6 +684,14 @@ def run_wizard(
 
     if _ask_yes_no(io_, "\nRefine options section by section?", default=True):
         _main_menu(io_, cfg)
+
+    # Strip any internal wizard-only markers before validation/save. These
+    # are prefixed with underscore and aren't part of the public schema.
+    vp = cfg.get("variablePrefix")
+    if isinstance(vp, dict):
+        for k in list(vp.keys()):
+            if k.startswith("_"):
+                del vp[k]
 
     # Validate before writing.
     errors = validate_config(cfg)

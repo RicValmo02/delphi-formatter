@@ -83,6 +83,59 @@ delphi-formatter format MyUnit.pas --config delphi-formatter.json --diff
 delphi-formatter check MyUnit.pas --config delphi-formatter.json
 ```
 
+## Formatting a whole project
+
+`format` and `check` both accept **one or more files or directories**.
+When you pass a directory the formatter walks it recursively, applies the
+include / exclude filters, and processes every source file that matches.
+
+```bash
+# See what would change across the whole tree (no writes, exit 1 if dirty)
+delphi-formatter format src/ --config delphi-formatter.json --check
+
+# Reformat the whole project in place
+delphi-formatter format src/ --config delphi-formatter.json --write
+
+# Preview the diff for a multi-root tree
+delphi-formatter format src/ tests/ --config delphi-formatter.json --diff | less
+
+# Include .dpr and .dpk on top of the default *.pas, skip a legacy subtree
+delphi-formatter format src/ --config delphi-formatter.json --write \
+    --include "*.pas" --include "*.dpr" --include "*.dpk" \
+    --exclude "src/legacy/**"
+```
+
+Rules to remember:
+
+- On a directory (or multiple paths) one of `--write`, `--diff`, `--check`
+  is **required** — no accidental mass reformatting.
+- Default includes: `*.pas` (override with one or more `--include GLOB`).
+- Default excludes: `**/bin/**`, `**/obj/**`, `**/__history/**`,
+  `**/__recovery/**` (Delphi/IDE build output). Your `--exclude`s are
+  *added* on top; use `--no-default-excludes` to start from a clean slate.
+- Use `--quiet` to suppress per-file output (summary and errors only) or
+  `--verbose` to print one line per file, changed or not.
+- `check` is a convenience alias for `format --check`.
+- Per-file errors (decode failure, formatter error, …) never abort the
+  run. They're collected into the final summary; the exit code is `1` if
+  any file errored.
+
+Exit codes:
+
+| Code | Meaning                                                         |
+|------|-----------------------------------------------------------------|
+| 0    | clean — nothing to change (check) or every file written (write) |
+| 1    | at least one file would change (check) **or** a per-file error  |
+| 2    | config error, bad usage, missing path, or missing mode flag     |
+
+### CI / pre-commit
+
+```yaml
+# GitHub Action snippet
+- run: pip install -e .
+- run: delphi-formatter format src/ --config delphi-formatter.json --check
+```
+
 ## Interactive setup (`wizard`)
 
 If you don't want to read the whole config reference below, run the wizard
@@ -199,6 +252,72 @@ which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |
+
+## VCL forms and DFM files
+
+In a VCL / FMX project the `.pas` file of a form is paired with a sibling
+`.dfm` (or `.fmx`) resource. The DFM declares every visual component by
+name:
+
+```
+object Form1: TForm1
+  object Button1: TButton
+    OnClick = Button1Click
+  end
+end
+```
+
+The name `Button1` in the DFM **must** match the field `Button1` declared
+in the form class. Renaming one without the other silently breaks the
+visual binding — the component simply stops working at runtime.
+
+To keep you safe, the formatter detects *form classes* (classes that
+inherit from `TForm`, `TFrame`, `TDataModule` or `TCustomForm`, or whose
+`.pas` has a sibling `.dfm`) and treats them specially.
+
+### `variablePrefix.skipVisualComponents`
+
+This boolean controls what happens when a rename rule would touch a form
+field.
+
+- **`true` (default, recommended)** — form classes are left alone. Their
+  fields are never renamed and their `.dfm` is never touched. Non-form
+  classes still get the full rename treatment. This is the safe choice if
+  you've just dropped the formatter into an existing project.
+
+- **`false`** — the formatter renames form fields **and** patches the
+  sibling `.dfm` in sync. Every occurrence of the old field name in the
+  DFM (in `object <Name>: <Type>` headers, and in bare-identifier property
+  values like `DataSource = DataSource1`) is rewritten. Event handler
+  properties (`OnClick`, `OnChange`, `Columns.OnColumnClick`, …) are
+  never renamed — they point at methods, which the formatter doesn't
+  touch.
+
+Example with `skipVisualComponents: false` and a `byType` rule
+`TButton → btn`:
+
+```
+# before
+Unit1.pas:   Button1: TButton;
+Unit1.dfm:   object Button1: TButton ... end
+
+# after `delphi-formatter format Unit1.pas --write`
+Unit1.pas:   btnButton1: TButton;
+Unit1.dfm:   object btnButton1: TButton ... end
+```
+
+The DFM is rewritten **positionally** — indentation, comments, blank
+lines, CRLF line endings, binary picture blocks, and everything else that
+isn't the renamed identifier stays byte-identical.
+
+### Binary DFMs
+
+Delphi can save DFMs in either textual (default) or binary form (magic
+bytes `TPF0`). The formatter only handles textual DFMs. If it encounters
+a binary DFM it refuses the pair cleanly — the `.pas` is left untouched
+and a `error: ... dfm is in binary format, convert to text first` line
+is printed on stderr. Convert the DFM to text in Delphi's IDE (right
+click → *View as Text*) before running the formatter.
 
 ## Example
 
