@@ -1,0 +1,65 @@
+{
+  "indent": {
+    "style": "spaces",
+    "size": 2,
+    "continuationIndent": 2
+  },
+  "keywords": {
+    "case": "lower"
+  },
+  "builtinTypes": {
+    "case": "preserve"
+  },
+  "variablePrefix": {
+    "local": {
+      "enabled": true,
+      "prefix": "L",
+      "capitalizeAfterPrefix": true
+    },
+    "classField": {
+      "enabled": true,
+      "prefix": "F",
+      "capitalizeAfterPrefix": true
+    },
+    "byType": {
+      "enabled": true,
+      "rules": [
+        { "typePattern": "TButton",      "prefix": "btn" },
+        { "typePattern": "TEdit",        "prefix": "edt" },
+        { "typePattern": "TLabel",       "prefix": "lbl" },
+        { "typePattern": "TForm",        "prefix": "frm" },
+        { "typePattern": "TMemo",        "prefix": "mem" },
+        { "typePattern": "TComboBox",    "prefix": "cbx" },
+        { "typePattern": "TCheckBox",    "prefix": "chk" },
+        { "typePattern": "TPanel",       "prefix": "pnl" },
+        { "typePattern": "TStringList",  "prefix": "sl" },
+        { "typePattern": "TList.*",      "prefix": "lst" }
+      ],
+      "conflictResolution": "typePrefixOverridesScope"
+    }
+  },
+  "alignment": {
+    "alignAssignments": false,
+    "alignVarColons": true,
+    "alignConstEquals": true,
+    "maxAlignSpaces": 40
+  },
+  "spacing": {
+    "aroundOperators": true,
+    "afterComma": true,
+    "beforeSemicolon": false,
+    "insideParens": false
+  },
+  "blankLines": {
+    "collapseConsecutive": true,
+    "maxConsecutive": 1
+  },
+  "endOfFile": {
+    "trimTrailingWhitespace": true,
+    "ensureFinalNewline": true,
+    "lineEnding": "auto"
+  },
+  "beginEndStyle": {
+    "beginOnNewLine": true
+  }
+}
