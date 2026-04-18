@@ -1,6 +1,6 @@
-"""Rename variables / fields according to prefix rules.
+"""Rename variables / fields / parameters according to prefix rules.
 
-Three rule families are implemented:
+Four rule families are implemented:
 
 * ``variablePrefix.local``      prefix for variables declared in a ``var``
                                  section inside a procedure / function body
@@ -8,8 +8,18 @@ Three rule families are implemented:
 * ``variablePrefix.classField`` prefix for fields declared inside a
                                  ``class`` / ``record`` block
                                  (e.g. ``data`` -> ``FData``).
+* ``variablePrefix.parameter``  prefix for formal parameters in a
+                                 procedure / function signature
+                                 (e.g. ``Value`` -> ``AValue``). Rename is
+                                 scoped to the routine's header and body,
+                                 so call sites are never touched. Forward
+                                 declarations (in ``interface`` or inside a
+                                 class body) are renamed in sync with the
+                                 implementation header.
 * ``variablePrefix.byType``     type-based prefix, e.g. any variable of
                                  type ``TButton`` gets ``btn`` prepended.
+                                 Does NOT apply to parameters — the
+                                 parameter prefix always wins there.
 
 The pass identifies declarations, computes a rename map, and then applies
 it to every identifier token that matches (skipping tokens that follow a
@@ -270,7 +280,7 @@ class Decl:
     name_token_idx: int      # index into the full token list
     name: str
     type_name: str | None
-    scope: str               # 'local' | 'field'
+    scope: str               # 'local' | 'field' | 'parameter'
 
 
 def _parse_var_block(
@@ -480,6 +490,214 @@ def _collect_class_fields(
 
 
 # ---------------------------------------------------------------------------
+# Parameter parsing
+# ---------------------------------------------------------------------------
+#
+# Grammar (informal):
+#
+#   header   := ('procedure' | 'function' | 'constructor' | 'destructor')
+#               QUALIFIED_NAME '(' params? ')' [':' TYPE] ';'
+#   params   := group (';' group)*
+#   group    := [MOD] IDENT (',' IDENT)* ':' TYPE [ '=' default ]
+#   MOD      := 'const' | 'var' | 'out'
+#
+# We don't rename inside nested anonymous methods / function-typed parameters
+# (e.g. ``Fn: function(x: Integer): Integer``); we only treat ``Fn`` as the
+# parameter name and stop there.
+
+
+def _find_header_end(sig: list[tuple[int, Token]], header_start: int) -> int:
+    """Given the index of a ``procedure``/``function`` keyword, return the
+    index of the ``;`` that terminates the header (after the ``)`` and any
+    return-type). Returns -1 if no such ``;`` is found (malformed).
+    """
+    n = len(sig)
+    paren_depth = 0
+    j = header_start + 1
+    while j < n:
+        raw = sig[j][1].value
+        if raw == "(":
+            paren_depth += 1
+        elif raw == ")":
+            paren_depth -= 1
+        elif raw == ";" and paren_depth == 0:
+            return j
+        # Defensive: if we walk into a 'begin' at depth 0 without seeing ';',
+        # the header is malformed — bail.
+        if paren_depth == 0 and _lv(sig[j][1]) == "begin":
+            return -1
+        j += 1
+    return -1
+
+
+def _find_all_proc_headers(
+    sig: list[tuple[int, Token]],
+) -> list[tuple[int, int, ProcScope | None]]:
+    """Find every procedure/function declaration in the unit.
+
+    Returns a list of ``(header_start_sig, header_end_sig, proc_or_None)``
+    tuples, where:
+
+    * ``header_start_sig`` is the index of the ``procedure``/``function``
+      keyword in the significant-token list.
+    * ``header_end_sig`` is the index of the ``;`` that terminates the header.
+    * ``proc_or_None`` is a :class:`ProcScope` if the routine has a body
+      (implementation), or ``None`` for forward declarations — both top-level
+      (``interface`` section) and inside a ``class``/``record`` body.
+
+    Unlike :func:`_find_scopes`, this walker does NOT skip over class bodies:
+    forward declarations *inside* a class need to be rewritten too so the
+    signature stays coherent with its matching implementation.
+    """
+    results: list[tuple[int, int, ProcScope | None]] = []
+    n = len(sig)
+    i = 0
+    while i < n:
+        tok = sig[i][1]
+        if tok.type == KEYWORD and _lv(tok) in (
+            "procedure", "function", "constructor", "destructor"
+        ):
+            # Skip anonymous-method / type-alias contexts:
+            #   TFunc = function(x: Integer): Integer;        -- after '='
+            #   F: procedure(x: Integer) of object;           -- after ':'
+            #   OnClick := procedure(Sender: TObject) ...     -- after ':='
+            prev = sig[i - 1][1].value if i > 0 else ""
+            if prev in ("=", ":", ":="):
+                i += 1
+                continue
+
+            header_end = _find_header_end(sig, i)
+            if header_end < 0:
+                i += 1
+                continue
+
+            proc = _find_proc_body(sig, i)
+            results.append((i, header_end, proc))
+            # Advance past whichever is later: the header or the body end.
+            i = (proc.body_end if proc is not None else header_end) + 1
+            continue
+
+        i += 1
+    return results
+
+
+def _parse_param_group(
+    sig: list[tuple[int, Token]], start: int, end: int, decls: list[Decl]
+) -> None:
+    """Parse a single parameter group ``[MOD] name(,name)* : TYPE [= default]``
+    covering sig[start:end] (exclusive). Append Decl entries to *decls*.
+    """
+    k = start
+    # Skip the optional modifier (const/var/out) once.
+    if k < end:
+        t = sig[k][1]
+        if t.type == KEYWORD and _lv(t) in ("const", "var", "out"):
+            k += 1
+
+    # Collect IDENT (',' IDENT)* until we reach ':'.
+    names: list[tuple[int, str]] = []
+    while k < end:
+        t = sig[k][1]
+        if t.type == IDENT:
+            names.append((sig[k][0], t.value))
+            k += 1
+            if k < end and sig[k][1].value == ",":
+                k += 1
+                continue
+            break  # expect ':'
+        # Unexpected token — skip defensively.
+        k += 1
+
+    # Find the ':' separator and then the first plausible type token.
+    while k < end and sig[k][1].value != ":":
+        k += 1
+
+    type_name: str | None = None
+    if k < end and sig[k][1].value == ":":
+        j = k + 1
+        while j < end:
+            tt = sig[j][1]
+            lv = _lv(tt)
+            # Skip array/const modifiers inside the type expression.
+            if tt.type == KEYWORD and lv in ("array", "const", "of"):
+                j += 1
+                continue
+            if tt.type == IDENT:
+                type_name = tt.value
+                break
+            if tt.type == KEYWORD and lv in (
+                "string", "record", "set", "file", "procedure", "function",
+            ):
+                type_name = tt.value
+                break
+            j += 1
+
+    for name_idx, name_val in names:
+        decls.append(Decl(name_idx, name_val, type_name, scope="parameter"))
+
+
+def _collect_parameter_decls(
+    sig: list[tuple[int, Token]], header_start: int, header_end: int
+) -> list[Decl]:
+    """Parse the parameter list of a procedure/function header and return
+    Decl entries with ``scope='parameter'``.
+
+    Accepts both forms — with and without a body. Returns an empty list for
+    parameter-less routines (``procedure Foo;`` or ``procedure Foo();``).
+    """
+    # Locate the outermost '(' of the header.
+    paren_start = -1
+    j = header_start + 1
+    while j < header_end:
+        v = sig[j][1].value
+        if v == "(":
+            paren_start = j
+            break
+        # A ':' at top level means the return-type came before the parens?
+        # That's not legal Delphi — bail out cleanly.
+        if v == ":":
+            return []
+        j += 1
+    if paren_start < 0:
+        return []
+
+    # Find the matching ')'.
+    depth = 1
+    paren_end = -1
+    j = paren_start + 1
+    while j < header_end:
+        v = sig[j][1].value
+        if v == "(":
+            depth += 1
+        elif v == ")":
+            depth -= 1
+            if depth == 0:
+                paren_end = j
+                break
+        j += 1
+    if paren_end < 0:
+        return []
+
+    # Split parameter groups by ';' at paren_depth == 0 within the outer
+    # parens. (Inner parens matter for default values like ``= Func(1)`` and
+    # for nested procedural type references.)
+    decls: list[Decl] = []
+    inner_depth = 0
+    group_start = paren_start + 1
+    for j in range(paren_start + 1, paren_end):
+        v = sig[j][1].value
+        if v in ("(", "["):
+            inner_depth += 1
+        elif v in (")", "]"):
+            inner_depth -= 1
+        elif v == ";" and inner_depth == 0:
+            _parse_param_group(sig, group_start, j, decls)
+            group_start = j + 1
+    _parse_param_group(sig, group_start, paren_end, decls)
+    return decls
+
+
+# ---------------------------------------------------------------------------
 # Rename computation
 # ---------------------------------------------------------------------------
 
@@ -504,7 +722,30 @@ def _compute_new_name(decl: Decl, config: dict[str, Any]) -> str | None:
     by_type_cfg = vp.get("byType", {}) or {}
     local_cfg = vp.get("local", {}) or {}
     field_cfg = vp.get("classField", {}) or {}
+    param_cfg = vp.get("parameter", {}) or {}
 
+    # --- Parameters: the "Argument" prefix (A) is a semantic marker that
+    # always wins over byType. A `Button: TButton` parameter becomes
+    # `AButton`, never `btnButton`, because being-an-argument trumps
+    # being-of-a-specific-type in the classic Delphi naming convention.
+    if decl.scope == "parameter":
+        if not param_cfg.get("enabled"):
+            return None
+        use_prefix = param_cfg.get("prefix", "") or ""
+        use_cap = bool(param_cfg.get("capitalizeAfterPrefix", True))
+        if not use_prefix:
+            return None
+        old = decl.name
+        if old.lower().startswith(use_prefix.lower()):
+            remainder = old[len(use_prefix):]
+            if remainder and (remainder[0].isupper() or not use_cap or not remainder[0].isalpha()):
+                return None
+        rest = old
+        if use_cap and rest:
+            rest = rest[0].upper() + rest[1:]
+        return use_prefix + rest
+
+    # --- Local/field scopes: may interact with byType via conflictResolution.
     type_prefix: str | None = None
     if by_type_cfg.get("enabled") and decl.type_name:
         type_prefix = _match_type_rule(decl.type_name, by_type_cfg.get("rules", []) or [])
@@ -635,6 +876,7 @@ def apply(
     if not (
         (vp.get("local", {}) or {}).get("enabled")
         or (vp.get("classField", {}) or {}).get("enabled")
+        or (vp.get("parameter", {}) or {}).get("enabled")
         or (vp.get("byType", {}) or {}).get("enabled")
     ):
         return {}
@@ -666,6 +908,29 @@ def apply(
     proc_decls: list[tuple[ProcScope, list[Decl]]] = []
     for proc in proc_scopes:
         proc_decls.append((proc, _collect_local_decls(sig, proc)))
+
+    # --- Parameters first: scoped to each header (+ body if present), so
+    # rename is atomic per-routine and never leaks to the call site. Running
+    # this BEFORE the unit-wide field rename prevents a field named ``Value``
+    # from accidentally hijacking a parameter of the same name.
+    all_headers = _find_all_proc_headers(sig)
+    for header_start_sig, header_end_sig, proc in all_headers:
+        params = _collect_parameter_decls(sig, header_start_sig, header_end_sig)
+        if not params:
+            continue
+        param_map: dict[str, str] = {}
+        for d in params:
+            new = _compute_new_name(d, config)
+            if new and new.lower() != d.name.lower():
+                param_map[d.name] = new
+        if not param_map:
+            continue
+        # Rename range: from the 'procedure' keyword through either the
+        # header-terminating ';' (forward decl) or the body 'end' (impl).
+        end_sig = proc.body_end if proc is not None else header_end_sig
+        start_tok_idx = sig[header_start_sig][0]
+        end_tok_idx = sig[end_sig][0]
+        _apply_rename(tokens, param_map, token_range=(start_tok_idx, end_tok_idx))
 
     # --- Compute rename maps
     # Class fields are renamed unit-wide (referenced from methods elsewhere).

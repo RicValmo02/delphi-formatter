@@ -246,12 +246,77 @@ which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
 | Uppercase keywords, Delphi-standard `F` fields | `"keywords": { "case": "upper" }`, `"variablePrefix.classField": { "enabled": true, "prefix": "F" }` |
 | Hungarian-ish VCL locals (`btnOK`, `edtName`, `lstItems`) | `"variablePrefix.byType": { "enabled": true, "conflictResolution": "typePrefixOverridesScope" }` |
 | Every local starts with `L` | `"variablePrefix.local": { "enabled": true, "prefix": "L" }` |
+| Delphi-standard `A` parameters (`AValue`, `AIndex`, `ASender`) | `"variablePrefix.parameter": { "enabled": true, "prefix": "A" }` — **on by default** |
+| Opt out of `A` parameter prefix | `"variablePrefix.parameter": { "enabled": false }` |
 | Keep your own spelling of keywords | `"keywords": { "case": "preserve" }` |
 | Lowercase everything (keywords *and* `Integer`, `Boolean`, `TDateTime`, …) | `"keywords": { "case": "lower" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Same, but UPPERCASE | `"keywords": { "case": "upper" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |
+
+### When a name already starts with the prefix letter
+
+A name is treated as *already prefixed* — and therefore left alone — only
+when the character right after the prefix is uppercase (or not a letter,
+or `capitalizeAfterPrefix` is `false`). This follows the classic Delphi
+`LXxx` / `FXxx` convention, where a capital letter separates the prefix
+from the rest of the identifier.
+
+Concretely, with `variablePrefix.local.prefix = "L"` and
+`variablePrefix.classField.prefix = "F"`:
+
+| Declared name | First-run output | Why |
+|---|---|---|
+| `LengthArr` | **`LLengthArr`** | after `L` comes `e` (lowercase) — not recognized as an existing prefix, so `L` is added |
+| `LCount` | `LCount` | after `L` comes `C` (uppercase) — already prefixed |
+| `Foo` (field) | **`FFoo`** | after `F` comes `o` (lowercase) |
+| `FName` (field) | `FName` | after `F` comes `N` (uppercase) — already prefixed |
+| `btnSave` (byType `TButton → btn`) | `btnSave` | after `btn` comes `S` — already prefixed |
+
+The rename is **idempotent**: running `--write` a second time on the
+output of the first run produces byte-identical text. If `LLengthArr` is
+not what you want for a specific identifier, rename it by hand before
+enabling the rule, or pick a different declaration style.
+
+### Parameter prefix (`A`, on by default)
+
+Formal parameters in procedure/function signatures are prefixed with `A`
+(Argument) — the classic Delphi/Borland convention you see across the RTL
+and VCL (`AValue`, `AIndex`, `ASender`). The rename applies to the
+signature (both the forward declaration in ``interface`` / inside a class
+body AND the implementation header) and to every use of the parameter
+inside the routine body, but **never to the call site** — caller-side
+variables keep their original name:
+
+```pascal
+// before
+procedure Test(Value1: Integer; Anno: Integer);
+begin
+  ShowMessage(IntToStr(Value1 + Anno));
+end;
+
+var Mese, Anno: Integer;
+Test(Mese, Anno);   // call site
+
+// after
+procedure Test(AValue1: Integer; AAnno: Integer);
+begin
+  ShowMessage(IntToStr(AValue1 + AAnno));
+end;
+
+var Mese, Anno: Integer;
+Test(Mese, Anno);   // ← unchanged: caller's locals keep their name
+```
+
+The parameter prefix **always wins over byType**: a parameter
+`Button: TButton` with a byType rule `TButton → btn` becomes `AButton`,
+not `btnButton`. Being-an-argument is treated as a semantic marker that
+trumps type-based naming. If this isn't what you want, set
+`"variablePrefix.parameter.enabled": false`.
+
+Already-prefixed parameters (`AValue`, `ASender`) are left alone — the
+same "capital letter after the prefix" rule applies.
 
 ## VCL forms and DFM files
 

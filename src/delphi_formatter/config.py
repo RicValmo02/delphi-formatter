@@ -47,6 +47,23 @@ _DEFAULT: dict[str, Any] = {
             "prefix": "F",
             "capitalizeAfterPrefix": True,
         },
+        # Parameters of procedures/functions/methods. Classic Delphi/Borland
+        # convention is to prefix them with "A" (Argument): AValue, AIndex,
+        # ASender. Rename propagates to every occurrence of the parameter name
+        # inside the routine body AND the forward declaration header, but
+        # NEVER touches the call site — a variable named `Anno` passed to
+        # `Test(Mese, Anno)` stays `Anno`; only the formal parameter name in
+        # `procedure Test(AMese, AAnno: Integer)` is rewritten.
+        #
+        # Unlike classField/local, this rule ALWAYS wins over byType: a
+        # parameter `Button: TButton` with byType rule `TButton -> btn`
+        # becomes `AButton`, not `btnButton`. The semantic "this is an
+        # argument" trumps the type-based naming.
+        "parameter": {
+            "enabled": True,
+            "prefix": "A",
+            "capitalizeAfterPrefix": True,
+        },
         "byType": {
             "enabled": False,
             "rules": [
@@ -201,6 +218,24 @@ def validate_config(config: dict[str, Any]) -> list[str]:
             "variablePrefix.skipVisualComponents: must be a boolean"
             f" (got {vp['skipVisualComponents']!r})"
         )
+
+    # Sub-dict validators for local/classField/parameter: all share the same
+    # {enabled: bool, prefix: str, capitalizeAfterPrefix: bool} schema.
+    for sub in ("local", "classField", "parameter"):
+        node = vp.get(sub)
+        if node is None:
+            continue
+        if not isinstance(node, dict):
+            errors.append(f"variablePrefix.{sub}: must be an object")
+            continue
+        if "enabled" in node and not isinstance(node["enabled"], bool):
+            errors.append(f"variablePrefix.{sub}.enabled: must be a boolean")
+        if "prefix" in node and not isinstance(node["prefix"], str):
+            errors.append(f"variablePrefix.{sub}.prefix: must be a string")
+        if "capitalizeAfterPrefix" in node and not isinstance(node["capitalizeAfterPrefix"], bool):
+            errors.append(
+                f"variablePrefix.{sub}.capitalizeAfterPrefix: must be a boolean"
+            )
 
     by_type = vp.get("byType", {})
     rules = by_type.get("rules", [])
