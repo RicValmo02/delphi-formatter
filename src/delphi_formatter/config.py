@@ -22,7 +22,11 @@ _DEFAULT: dict[str, Any] = {
         "case": "lower",            # "lower" | "upper" | "preserve"
     },
     "builtinTypes": {
-        "case": "preserve",         # Integer, String, Boolean, ...
+        # "lower" | "upper" | "preserve" | "match-keywords"
+        # "match-keywords" follows whatever 'keywords.case' is set to, so
+        # 'String', 'Integer', 'Boolean', ... stay in sync with 'begin', 'if',
+        # 'procedure', ... without having to configure the same value twice.
+        "case": "preserve",
     },
     "variablePrefix": {
         "local": {
@@ -143,14 +147,20 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     """Return a list of human-readable validation errors (empty if all OK)."""
     errors: list[str] = []
 
-    def _check_case(path: str, value: Any) -> None:
-        if value not in ("lower", "upper", "preserve"):
-            errors.append(f"{path}: must be 'lower', 'upper' or 'preserve' (got {value!r})")
+    def _check_case(path: str, value: Any, extra: tuple[str, ...] = ()) -> None:
+        allowed = ("lower", "upper", "preserve") + extra
+        if value not in allowed:
+            pretty = ", ".join(repr(a) for a in allowed)
+            errors.append(f"{path}: must be one of {pretty} (got {value!r})")
 
     if config.get("keywords", {}).get("case") is not None:
         _check_case("keywords.case", config["keywords"]["case"])
     if config.get("builtinTypes", {}).get("case") is not None:
-        _check_case("builtinTypes.case", config["builtinTypes"]["case"])
+        _check_case(
+            "builtinTypes.case",
+            config["builtinTypes"]["case"],
+            extra=("match-keywords",),
+        )
 
     indent = config.get("indent", {})
     if indent.get("style") not in ("spaces", "tabs"):

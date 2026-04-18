@@ -40,6 +40,9 @@ def _profile_delphi_standard() -> dict[str, Any]:
     """Classic Delphi: lower-case keywords, ``F`` class fields, no byType."""
     cfg = default_config()
     cfg["keywords"]["case"] = "lower"
+    # Built-in types follow the keyword case so 'String', 'Integer', ...
+    # stay consistent with 'begin', 'if', 'procedure'.
+    cfg["builtinTypes"]["case"] = "match-keywords"
     cfg["variablePrefix"]["classField"]["enabled"] = True
     cfg["variablePrefix"]["classField"]["prefix"] = "F"
     return cfg
@@ -49,6 +52,7 @@ def _profile_vcl_hungarian() -> dict[str, Any]:
     """VCL Hungarian: L locals, F fields, byType enabled with common presets."""
     cfg = default_config()
     cfg["keywords"]["case"] = "lower"
+    cfg["builtinTypes"]["case"] = "match-keywords"
     cfg["variablePrefix"]["local"]["enabled"] = True
     cfg["variablePrefix"]["local"]["prefix"] = "L"
     cfg["variablePrefix"]["classField"]["enabled"] = True
@@ -253,14 +257,22 @@ def _section_indent(io_: _IO, cfg: dict[str, Any]) -> None:
 
 def _section_cases(io_: _IO, cfg: dict[str, Any]) -> None:
     io_.writeln("\n== Keyword & built-in-type case ==")
-    opts = ["lower", "upper", "preserve"]
+    kw_opts = ["lower", "upper", "preserve"]
     cfg["keywords"]["case"] = _ask_choice(
         io_, "Keyword case (begin, end, procedure, ...):",
-        opts, cfg["keywords"].get("case", "lower"),
+        kw_opts, cfg["keywords"].get("case", "lower"),
+    )
+    # Built-in types additionally support 'match-keywords' so the user can
+    # keep 'String', 'Integer', 'Boolean', TDateTime, ... in lock-step with
+    # whatever was chosen above without having to repeat it.
+    bt_opts = ["lower", "upper", "preserve", "match-keywords"]
+    io_.writeln(
+        "  tip: pick 'match-keywords' to keep built-in types in sync with "
+        "the keyword case above"
     )
     cfg["builtinTypes"]["case"] = _ask_choice(
-        io_, "Built-in type case (Integer, String, Boolean, ...):",
-        opts, cfg["builtinTypes"].get("case", "preserve"),
+        io_, "Built-in type case (Integer, String, Boolean, TDateTime, ...):",
+        bt_opts, cfg["builtinTypes"].get("case", "preserve"),
     )
 
 

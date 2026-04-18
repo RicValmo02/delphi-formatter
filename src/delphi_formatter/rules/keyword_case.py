@@ -24,6 +24,12 @@ def apply(tokens: list[Token], config: dict[str, Any]) -> None:
     kw_mode = config.get("keywords", {}).get("case", "preserve")
     bt_mode = config.get("builtinTypes", {}).get("case", "preserve")
 
+    # Synthetic mode: 'match-keywords' means "follow whatever the user picked
+    # for 'keywords.case'". Resolve it here so the rest of the pass does not
+    # need to know about it.
+    if bt_mode == "match-keywords":
+        bt_mode = kw_mode
+
     if kw_mode == "preserve" and bt_mode == "preserve":
         return
 

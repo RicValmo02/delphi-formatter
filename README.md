@@ -15,7 +15,10 @@ Written in pure Python (standard library only, no dependencies).
 - **Keyword case** — force all Delphi reserved words to `lower`, `UPPER`,
   or leave them as the author wrote them.
 - **Built-in type case** — separate policy for things like `Integer`,
-  `String`, `Boolean`, `TDateTime`.
+  `String`, `Boolean`, `TDateTime`. Supports an extra `match-keywords`
+  value that keeps built-in types in lock-step with whatever you picked
+  for `keywords.case` (so `string` stays lower when `begin` does, and
+  `STRING` when `BEGIN` does).
 - **Local-variable prefix** — every variable declared inside a
   `procedure` / `function` `var` block is renamed with a configurable
   prefix (e.g. `ciao` → `LCiao`). Renaming is scope-local: other
@@ -179,6 +182,10 @@ A default config (from `init-config`):
 Only the keys you want to override need to appear in your config — unset
 keys inherit from the defaults.
 
+`keywords.case` accepts `"lower"`, `"upper"`, or `"preserve"`.
+`builtinTypes.case` accepts those three values **plus** `"match-keywords"`,
+which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
+
 ### Prefix recipes
 
 | Goal | Config |
@@ -187,6 +194,8 @@ keys inherit from the defaults.
 | Hungarian-ish VCL locals (`btnOK`, `edtName`, `lstItems`) | `"variablePrefix.byType": { "enabled": true, "conflictResolution": "typePrefixOverridesScope" }` |
 | Every local starts with `L` | `"variablePrefix.local": { "enabled": true, "prefix": "L" }` |
 | Keep your own spelling of keywords | `"keywords": { "case": "preserve" }` |
+| Lowercase everything (keywords *and* `Integer`, `Boolean`, `TDateTime`, …) | `"keywords": { "case": "lower" }`, `"builtinTypes": { "case": "match-keywords" }` |
+| Same, but UPPERCASE | `"keywords": { "case": "upper" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |
