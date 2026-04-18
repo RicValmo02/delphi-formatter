@@ -1,0 +1,12 @@
+{
+  "keywords":     { "case": "lower" },
+  "builtinTypes": {
+    "case": "lower",
+    "overrides": {
+      "Integer":   "Integer",
+      "Boolean":   "Boolean",
+      "TDateTime": "TDateTime",
+      "Cardinal":  "Cardinal"
+    }
+  }
+}
