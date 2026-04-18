@@ -60,5 +60,78 @@ class KeywordCaseTests(unittest.TestCase):
         self.assertIn("string", out)
 
 
+class MatchKeywordsTests(unittest.TestCase):
+    """builtinTypes.case = 'match-keywords' tracks keywords.case."""
+
+    def _src(self) -> str:
+        return (
+            "PROCEDURE Demo;\n"
+            "VAR\n"
+            "  a: String;\n"
+            "  b: Integer;\n"
+            "  c: Boolean;\n"
+            "  d: Char;\n"
+            "  e: TDateTime;\n"
+            "BEGIN\n"
+            "END;\n"
+        )
+
+    def test_match_keywords_follows_lower(self) -> None:
+        cfg = default_config()
+        cfg["keywords"]["case"] = "lower"
+        cfg["builtinTypes"]["case"] = "match-keywords"
+        cfg["alignment"]["alignVarColons"] = False
+        out = format_source(self._src(), cfg)
+        # Every built-in type lowercased
+        for t in ("string", "integer", "boolean", "char", "tdatetime"):
+            self.assertIn(t, out)
+        # And not the capitalised originals
+        for t in ("Integer", "Boolean", "Char", "TDateTime"):
+            self.assertNotIn(t, out)
+
+    def test_match_keywords_follows_upper(self) -> None:
+        cfg = default_config()
+        cfg["keywords"]["case"] = "upper"
+        cfg["builtinTypes"]["case"] = "match-keywords"
+        cfg["alignment"]["alignVarColons"] = False
+        out = format_source(self._src(), cfg)
+        for t in ("STRING", "INTEGER", "BOOLEAN", "CHAR", "TDATETIME"):
+            self.assertIn(t, out)
+
+    def test_match_keywords_follows_preserve(self) -> None:
+        """When keywords=preserve, built-in types also stay untouched."""
+        cfg = default_config()
+        cfg["keywords"]["case"] = "preserve"
+        cfg["builtinTypes"]["case"] = "match-keywords"
+        cfg["spacing"]["aroundOperators"] = False
+        cfg["spacing"]["afterComma"] = False
+        cfg["blankLines"]["collapseConsecutive"] = False
+        cfg["endOfFile"]["ensureFinalNewline"] = False
+        cfg["endOfFile"]["trimTrailingWhitespace"] = False
+        cfg["alignment"]["alignVarColons"] = False
+        cfg["spacing"]["declarationColon"] = {
+            "spaceBefore": False,
+            "spaceAfter": True,
+        }
+        cfg["spacing"]["assignment"] = {"spaceBefore": True, "spaceAfter": True}
+        src = "var x: Integer;"
+        out = format_source(src, cfg)
+        # Integer kept capitalised because match-keywords resolves to preserve.
+        self.assertIn("Integer", out)
+
+    def test_validation_accepts_match_keywords(self) -> None:
+        from delphi_formatter.config import validate_config
+        cfg = default_config()
+        cfg["builtinTypes"]["case"] = "match-keywords"
+        self.assertEqual(validate_config(cfg), [])
+
+    def test_validation_rejects_bogus_value(self) -> None:
+        from delphi_formatter.config import validate_config
+        cfg = default_config()
+        cfg["builtinTypes"]["case"] = "bogus"
+        errs = validate_config(cfg)
+        self.assertTrue(any("builtinTypes.case" in e for e in errs))
+
+
 if __name__ == "__main__":
     unittest.main()

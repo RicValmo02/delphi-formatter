@@ -37,9 +37,10 @@ def _profile_minimal() -> dict[str, Any]:
 
 
 def _profile_delphi_standard() -> dict[str, Any]:
-    """Classic Delphi: lower-case keywords, ``F`` class fields, no byType."""
+    """Classic Delphi: lower-case keywords + built-in types, ``F`` class fields."""
     cfg = default_config()
     cfg["keywords"]["case"] = "lower"
+    cfg["builtinTypes"]["case"] = "match-keywords"
     cfg["variablePrefix"]["classField"]["enabled"] = True
     cfg["variablePrefix"]["classField"]["prefix"] = "F"
     return cfg
@@ -49,6 +50,7 @@ def _profile_vcl_hungarian() -> dict[str, Any]:
     """VCL Hungarian: L locals, F fields, byType enabled with common presets."""
     cfg = default_config()
     cfg["keywords"]["case"] = "lower"
+    cfg["builtinTypes"]["case"] = "match-keywords"
     cfg["variablePrefix"]["local"]["enabled"] = True
     cfg["variablePrefix"]["local"]["prefix"] = "L"
     cfg["variablePrefix"]["classField"]["enabled"] = True
@@ -253,14 +255,28 @@ def _section_indent(io_: _IO, cfg: dict[str, Any]) -> None:
 
 def _section_cases(io_: _IO, cfg: dict[str, Any]) -> None:
     io_.writeln("\n== Keyword & built-in-type case ==")
-    opts = ["lower", "upper", "preserve"]
+    kw_opts = ["lower", "upper", "preserve"]
     cfg["keywords"]["case"] = _ask_choice(
-        io_, "Keyword case (begin, end, procedure, ...):",
-        opts, cfg["keywords"].get("case", "lower"),
+        io_, "Keyword case (begin, end, procedure, var, ...):",
+        kw_opts, cfg["keywords"].get("case", "lower"),
     )
+
+    # Built-in types: Integer, String, Boolean, Char, TDateTime, ... . The
+    # extra 'match-keywords' option makes them follow whatever was just
+    # picked for keywords (handy when you want EVERYTHING lowercase).
+    io_.writeln(
+        "\nBuilt-in type case (Integer, String, Boolean, Char, TDateTime, ...)."
+    )
+    io_.writeln(
+        "Tip: pick 'match-keywords' to keep built-in types in sync with "
+        "the keyword case above."
+    )
+    bt_opts = ["lower", "upper", "preserve", "match-keywords"]
+    current_bt = cfg["builtinTypes"].get("case", "preserve")
+    if current_bt not in bt_opts:
+        current_bt = "preserve"
     cfg["builtinTypes"]["case"] = _ask_choice(
-        io_, "Built-in type case (Integer, String, Boolean, ...):",
-        opts, cfg["builtinTypes"].get("case", "preserve"),
+        io_, "Built-in type case:", bt_opts, current_bt,
     )
 
 

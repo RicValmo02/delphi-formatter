@@ -15,7 +15,10 @@ Written in pure Python (standard library only, no dependencies).
 - **Keyword case** — force all Delphi reserved words to `lower`, `UPPER`,
   or leave them as the author wrote them.
 - **Built-in type case** — separate policy for things like `Integer`,
-  `String`, `Boolean`, `TDateTime`.
+  `String`, `Boolean`, `Char`, `TDateTime`. In addition to `lower` /
+  `upper` / `preserve`, the value **`match-keywords`** makes built-in
+  types automatically follow the chosen keyword case (so picking
+  *lowercase everything* becomes a single setting).
 - **Local-variable prefix** — every variable declared inside a
   `procedure` / `function` `var` block is renamed with a configurable
   prefix (e.g. `ciao` → `LCiao`). Renaming is scope-local: other
@@ -124,7 +127,7 @@ A default config (from `init-config`):
     "continuationIndent": 2
   },
   "keywords":     { "case": "lower" },
-  "builtinTypes": { "case": "preserve" },
+  "builtinTypes": { "case": "preserve" },  /* or "lower" / "upper" / "match-keywords" */
   "variablePrefix": {
     "local":      { "enabled": false, "prefix": "L", "capitalizeAfterPrefix": true },
     "classField": { "enabled": false, "prefix": "F", "capitalizeAfterPrefix": true },
@@ -190,6 +193,7 @@ keys inherit from the defaults.
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |
+| Lowercase **everything** (keywords *and* `Integer`, `Boolean`, `TDateTime`, …) | `"keywords": { "case": "lower" }`, `"builtinTypes": { "case": "match-keywords" }` |
 
 ## Example
 
