@@ -18,7 +18,9 @@ Written in pure Python (standard library only, no dependencies).
   `String`, `Boolean`, `TDateTime`. Supports an extra `match-keywords`
   value that keeps built-in types in lock-step with whatever you picked
   for `keywords.case` (so `string` stays lower when `begin` does, and
-  `STRING` when `BEGIN` does).
+  `STRING` when `BEGIN` does). **Per-type overrides** let you pin the
+  exact spelling of individual types (e.g. keep `string` lowercase but
+  force `Integer`, `Boolean`, `TDateTime` with a capital initial).
 - **Local-variable prefix** — every variable declared inside a
   `procedure` / `function` `var` block is renamed with a configurable
   prefix (e.g. `ciao` → `LCiao`). Renaming is scope-local: other
@@ -127,7 +129,7 @@ A default config (from `init-config`):
     "continuationIndent": 2
   },
   "keywords":     { "case": "lower" },
-  "builtinTypes": { "case": "preserve" },
+  "builtinTypes": { "case": "preserve", "overrides": {} },
   "variablePrefix": {
     "local":      { "enabled": false, "prefix": "L", "capitalizeAfterPrefix": true },
     "classField": { "enabled": false, "prefix": "F", "capitalizeAfterPrefix": true },
@@ -186,6 +188,26 @@ keys inherit from the defaults.
 `builtinTypes.case` accepts those three values **plus** `"match-keywords"`,
 which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
 
+`builtinTypes.overrides` takes precedence over `builtinTypes.case` on a
+per-type basis. Keys are matched case-insensitively; values are the
+literal spelling to emit (and must spell the same identifier as the key).
+Typical idiomatic-Delphi recipe:
+
+```json
+"builtinTypes": {
+  "case": "lower",
+  "overrides": {
+    "Integer":   "Integer",
+    "Boolean":   "Boolean",
+    "TDateTime": "TDateTime",
+    "Cardinal":  "Cardinal"
+  }
+}
+```
+
+…gives you lowercase `string`, `char`, `real`, etc. but keeps `Integer`,
+`Boolean`, `TDateTime`, `Cardinal` with their conventional capital initial.
+
 ### Prefix recipes
 
 | Goal | Config |
@@ -196,6 +218,7 @@ which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
 | Keep your own spelling of keywords | `"keywords": { "case": "preserve" }` |
 | Lowercase everything (keywords *and* `Integer`, `Boolean`, `TDateTime`, …) | `"keywords": { "case": "lower" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Same, but UPPERCASE | `"keywords": { "case": "upper" }`, `"builtinTypes": { "case": "match-keywords" }` |
+| Lowercase `string`/`char`/`real` but capital `Integer`/`Boolean`/`TDateTime` | `"builtinTypes": { "case": "lower", "overrides": { "Integer": "Integer", "Boolean": "Boolean", "TDateTime": "TDateTime" } }` |
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |

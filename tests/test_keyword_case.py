@@ -129,5 +129,106 @@ class MatchKeywordsTests(unittest.TestCase):
         )
 
 
+class BuiltinTypeOverridesTests(unittest.TestCase):
+    """`builtinTypes.overrides` pins individual types regardless of `case`."""
+
+    def _quiet(self) -> dict:
+        cfg = default_config()
+        cfg["keywords"]["case"] = "preserve"
+        cfg["spacing"]["aroundOperators"] = False
+        cfg["spacing"]["afterComma"] = False
+        cfg["alignment"]["alignVarColons"] = False
+        cfg["variablePrefix"]["local"]["enabled"] = False
+        cfg["variablePrefix"]["classField"]["enabled"] = False
+        cfg["variablePrefix"]["byType"]["enabled"] = False
+        return cfg
+
+    def test_override_wins_over_preserve(self) -> None:
+        cfg = self._quiet()
+        cfg["builtinTypes"]["case"] = "preserve"
+        cfg["builtinTypes"]["overrides"] = {"Integer": "Integer"}
+        src = "VAR x: INTEGER; y: string;"
+        out = format_source(src, cfg)
+        # 'INTEGER' forced to 'Integer'; 'string' untouched because
+        # case=preserve and not listed in overrides.
+        self.assertIn("Integer", out)
+        self.assertNotIn("INTEGER", out)
+        self.assertIn("string", out)
+
+    def test_override_wins_over_global_lower(self) -> None:
+        """string stays lower, Integer/Boolean pin to capital form."""
+        cfg = self._quiet()
+        cfg["keywords"]["case"] = "lower"
+        cfg["builtinTypes"]["case"] = "lower"
+        cfg["builtinTypes"]["overrides"] = {
+            "Integer": "Integer",
+            "Boolean": "Boolean",
+            "TDateTime": "TDateTime",
+        }
+        src = "VAR x: INTEGER; s: STRING; b: BOOLEAN; d: TDATETIME;"
+        out = format_source(src, cfg)
+        self.assertIn("Integer", out)
+        self.assertIn("Boolean", out)
+        self.assertIn("TDateTime", out)
+        self.assertIn("string", out)  # not overridden -> follows lower
+        self.assertNotIn("INTEGER", out)
+        self.assertNotIn("STRING", out)
+
+    def test_override_is_case_insensitive_lookup(self) -> None:
+        """Key 'integer' matches tokens 'Integer', 'INTEGER', 'integer'."""
+        cfg = self._quiet()
+        cfg["builtinTypes"]["case"] = "preserve"
+        cfg["builtinTypes"]["overrides"] = {"integer": "Integer"}
+        src = "var a: Integer; b: INTEGER; c: integer;"
+        out = format_source(src, cfg)
+        # All three spellings collapse to 'Integer'.
+        self.assertEqual(out.count("Integer"), 3)
+        self.assertNotIn("INTEGER", out)
+
+    def test_override_string_keeps_lower_while_others_capital(self) -> None:
+        """The exact use case the user asked about."""
+        cfg = self._quiet()
+        cfg["keywords"]["case"] = "lower"
+        cfg["builtinTypes"]["case"] = "preserve"
+        cfg["builtinTypes"]["overrides"] = {
+            "string": "string",
+            "Integer": "Integer",
+        }
+        src = "VAR x: INTEGER; s: STRING;"
+        out = format_source(src, cfg)
+        self.assertIn("Integer", out)
+        self.assertIn("string", out)
+        self.assertNotIn("STRING", out)
+        self.assertNotIn("INTEGER", out)
+
+    def test_validator_rejects_unknown_type(self) -> None:
+        cfg = default_config()
+        cfg["builtinTypes"]["overrides"] = {"NotAType": "NotAType"}
+        errors = validate_config(cfg)
+        self.assertTrue(
+            any("NotAType" in e for e in errors),
+            f"expected unknown-type error, got: {errors}",
+        )
+
+    def test_validator_rejects_different_identifier(self) -> None:
+        """Value must spell the same identifier as the key (case-insensitive)."""
+        cfg = default_config()
+        cfg["builtinTypes"]["overrides"] = {"Integer": "Banana"}
+        errors = validate_config(cfg)
+        self.assertTrue(
+            any("Integer" in e and "Banana" in e for e in errors),
+            f"expected identifier-mismatch error, got: {errors}",
+        )
+
+    def test_validator_accepts_good_overrides(self) -> None:
+        cfg = default_config()
+        cfg["builtinTypes"]["overrides"] = {
+            "string": "string",
+            "Integer": "Integer",
+            "Boolean": "Boolean",
+        }
+        self.assertEqual(validate_config(cfg), [])
+
+
 if __name__ == "__main__":
     unittest.main()

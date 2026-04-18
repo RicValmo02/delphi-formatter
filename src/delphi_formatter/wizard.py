@@ -275,6 +275,89 @@ def _section_cases(io_: _IO, cfg: dict[str, Any]) -> None:
         bt_opts, cfg["builtinTypes"].get("case", "preserve"),
     )
 
+    # --- Per-type overrides ----------------------------------------------
+    # Let the user pin the exact spelling of individual built-in types,
+    # independent of the global setting above. Typical Pascal idiom is
+    # "everything lower, but Integer/Boolean/TDateTime keep the initial
+    # capital" — which the global modes alone can't express.
+    io_.writeln(
+        "\n  -- Per-type overrides (optional)\n"
+        "  Use these to pin the exact spelling of individual types,\n"
+        "  overriding the global setting. Example: keep 'string' lowercase\n"
+        "  but force 'Integer', 'Boolean', 'TDateTime' with a capital I/B/T."
+    )
+    overrides: dict[str, str] = dict(
+        cfg["builtinTypes"].get("overrides") or {}
+    )
+
+    if not _ask_yes_no(
+        io_,
+        "Configure per-type overrides now?",
+        default=bool(overrides),
+    ):
+        cfg["builtinTypes"]["overrides"] = overrides
+        return
+
+    while True:
+        if overrides:
+            io_.writeln("\n  Current overrides:")
+            width = max(len(k) for k in overrides)
+            for k, v in overrides.items():
+                io_.writeln(f"    {k.ljust(width)}  ->  {v}")
+        else:
+            io_.writeln("\n  (no overrides)")
+        io_.writeln(
+            "\n  Actions:\n"
+            "    a) Add / update override\n"
+            "    r) Remove override\n"
+            "    d) Done"
+        )
+        io_.write("> ")
+        choice = io_.readline().strip().lower()
+        if choice in ("d", "done", ""):
+            break
+        if choice in ("a", "add"):
+            from .keywords import is_builtin_type
+            while True:
+                type_name = _ask_pascal_ident(
+                    io_,
+                    "Built-in type name (e.g. Integer, string, TDateTime)",
+                    None,
+                )
+                if is_builtin_type(type_name):
+                    break
+                io_.writeln(f"  {type_name!r} is not a known built-in type")
+            literal = _ask_pascal_ident(
+                io_,
+                "Exact spelling to emit (must spell the same identifier)",
+                type_name,
+            )
+            if literal.lower() != type_name.lower():
+                io_.writeln(
+                    f"  {literal!r} doesn't spell the same identifier "
+                    f"as {type_name!r} - try again"
+                )
+                continue
+            overrides[type_name] = literal
+            io_.writeln(f"  set: {type_name} -> {literal}")
+            continue
+        if choice in ("r", "remove"):
+            if not overrides:
+                io_.writeln("  (nothing to remove)")
+                continue
+            name = _ask_string(io_, "Override key to remove", None)
+            # Case-insensitive removal to match the runtime lookup.
+            hit = next((k for k in overrides if k.lower() == name.lower()), None)
+            if hit is None:
+                io_.writeln(f"  (no override for {name!r})")
+            else:
+                del overrides[hit]
+                io_.writeln(f"  removed {hit}")
+            continue
+        io_.writeln("  (unknown action)")
+
+    cfg["builtinTypes"]["overrides"] = overrides
+
 
 def _section_local_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
     io_.writeln("\n== Local variable prefix (var inside procedure/function) ==")
