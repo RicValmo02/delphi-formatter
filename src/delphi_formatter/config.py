@@ -65,6 +65,19 @@ _DEFAULT: dict[str, Any] = {
         "afterComma": True,
         "beforeSemicolon": False,
         "insideParens": False,
+        # Assignment operator ``:=`` (e.g. ``x := 5``).
+        # These always apply regardless of ``aroundOperators``.
+        "assignment": {
+            "spaceBefore": True,
+            "spaceAfter": True,
+        },
+        # Colon in declarations (e.g. ``num: Integer`` in a var/field/param
+        # declaration). When ``alignment.alignVarColons`` is on, alignment
+        # overrides the ``spaceBefore`` value to reach the aligned column.
+        "declarationColon": {
+            "spaceBefore": False,
+            "spaceAfter": True,
+        },
     },
     "blankLines": {
         "collapseConsecutive": True,
@@ -148,6 +161,21 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     line_ending = config.get("endOfFile", {}).get("lineEnding")
     if line_ending not in ("auto", "crlf", "lf"):
         errors.append(f"endOfFile.lineEnding: must be 'auto', 'crlf' or 'lf' (got {line_ending!r})")
+
+    spacing = config.get("spacing", {}) or {}
+    for sub, keys in (
+        ("assignment", ("spaceBefore", "spaceAfter")),
+        ("declarationColon", ("spaceBefore", "spaceAfter")),
+    ):
+        node = spacing.get(sub)
+        if node is None:
+            continue
+        if not isinstance(node, dict):
+            errors.append(f"spacing.{sub}: must be an object")
+            continue
+        for k in keys:
+            if k in node and not isinstance(node[k], bool):
+                errors.append(f"spacing.{sub}.{k}: must be a boolean")
 
     by_type = config.get("variablePrefix", {}).get("byType", {})
     rules = by_type.get("rules", [])

@@ -29,8 +29,10 @@ Written in pure Python (standard library only, no dependencies).
   expressions, so `TList.*` covers `TListBox`, `TListView`, and so on.
   When a variable matches both a scope rule and a type rule you choose
   which wins via `conflictResolution`.
-- **Spacing** — single space around `:=`, `=`, `<>`, `<=`, `>=`, after
-  `,`, optionally no space before `;`.
+- **Spacing** — fine-grained control: dedicated options for the
+  assignment operator `:=` (`num := 5`) and for the declaration colon
+  `:` (`num: Integer`), each with independent *before* / *after* toggles,
+  plus a master switch for other binary operators, `,` and `;`.
 - **Alignment** — align `:` columns inside `var` sections and `=` inside
   `const` sections.
 - **Whitespace hygiene** — trim trailing whitespace, collapse consecutive
@@ -62,6 +64,9 @@ PYTHONPATH=src python -m delphi_formatter ...
 # Generate a default config file next to your sources
 delphi-formatter init-config --output delphi-formatter.json
 
+# ... or build one interactively (recommended: walks you through every option)
+delphi-formatter wizard --output delphi-formatter.json
+
 # Format a single file to stdout
 delphi-formatter format MyUnit.pas --config delphi-formatter.json
 
@@ -74,6 +79,38 @@ delphi-formatter format MyUnit.pas --config delphi-formatter.json --diff
 # Exit 1 if any file would be reformatted (useful in CI / pre-commit)
 delphi-formatter check MyUnit.pas --config delphi-formatter.json
 ```
+
+## Interactive setup (`wizard`)
+
+If you don't want to read the whole config reference below, run the wizard
+and let it guide you:
+
+```bash
+delphi-formatter wizard --output delphi-formatter.json
+```
+
+What you get:
+
+1. **Starting profile** — pick one of:
+   - **Minimal** — everything off (pure defaults)
+   - **Delphi-standard** — lower-case keywords, `F` class-field prefix
+   - **VCL Hungarian** — `L` locals, `F` fields, type-based rules on
+     (`btn`, `edt`, `lbl`, …)
+   - or start **from an existing config** via `--from my-config.json`
+2. **Section-by-section refinement** — menu of ten sections: indentation,
+   keyword/built-in case, local/field prefix, spacing, alignment, blank
+   lines, line endings, plus a dedicated entry for the
+   **`byType` rules sub-loop**.
+3. **`byType` sub-loop** — add / edit / remove `typePattern → prefix` pairs
+   one at a time (e.g. `TCheckBox → chk`). Regex patterns are validated
+   before acceptance, and prefixes must be valid Pascal identifiers.
+4. **Preview on sample** — at any point, pick `Preview on sample` and the
+   wizard reformats an embedded Delphi snippet with the *current* config,
+   so you can see the effect of your choices before saving.
+5. **Validate & save** — the final config passes through
+   `validate_config()` before being written.
+
+Pass `--force` to overwrite an existing output file without being asked.
 
 ## Config reference
 
@@ -114,7 +151,15 @@ A default config (from `init-config`):
     "aroundOperators":  true,
     "afterComma":       true,
     "beforeSemicolon":  false,
-    "insideParens":     false
+    "insideParens":     false,
+    "assignment": {
+      "spaceBefore": true,
+      "spaceAfter":  true
+    },
+    "declarationColon": {
+      "spaceBefore": false,
+      "spaceAfter":  true
+    }
   },
   "blankLines": {
     "collapseConsecutive": true,
@@ -142,6 +187,9 @@ keys inherit from the defaults.
 | Hungarian-ish VCL locals (`btnOK`, `edtName`, `lstItems`) | `"variablePrefix.byType": { "enabled": true, "conflictResolution": "typePrefixOverridesScope" }` |
 | Every local starts with `L` | `"variablePrefix.local": { "enabled": true, "prefix": "L" }` |
 | Keep your own spelling of keywords | `"keywords": { "case": "preserve" }` |
+| Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
+| Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
+| No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |
 
 ## Example
 

@@ -6,10 +6,13 @@ Usage
     python -m delphi_formatter format <file.pas> [--config PATH] [--write] [--diff]
     python -m delphi_formatter init-config [--output delphi-formatter.json]
     python -m delphi_formatter check <file.pas> [--config PATH]
+    python -m delphi_formatter wizard [--output delphi-formatter.json] [--from PATH]
 
 ``format`` prints to stdout by default (so that it can be piped / diffed /
 snapshot-tested). Pass ``--write`` to overwrite the input file in place.
 ``check`` exits 1 if the file would be reformatted.
+``wizard`` launches an interactive REPL that builds a JSON config,
+starting from a profile.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from pathlib import Path
 
 from .config import default_config, load_config, save_config, validate_config
 from .formatter import format_source
+from .wizard import run_wizard
 
 
 def _read_source(path: str) -> str:
@@ -93,6 +97,14 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wizard(args: argparse.Namespace) -> int:
+    return run_wizard(
+        Path(args.output),
+        force=args.force,
+        from_path=Path(args.from_path) if args.from_path else None,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="delphi-formatter",
@@ -117,6 +129,24 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--output", "-o", default="delphi-formatter.json", help="Output path")
     pi.add_argument("--force", "-f", action="store_true", help="Overwrite if exists")
     pi.set_defaults(func=_cmd_init_config)
+
+    pw = sub.add_parser(
+        "wizard",
+        help="Build a config JSON interactively (profiles + fine tuning)",
+    )
+    pw.add_argument(
+        "--output", "-o", default="delphi-formatter.json",
+        help="Output path (default: delphi-formatter.json)",
+    )
+    pw.add_argument(
+        "--force", "-f", action="store_true",
+        help="Overwrite output without asking if it already exists",
+    )
+    pw.add_argument(
+        "--from", dest="from_path", default=None,
+        help="Start the wizard from an existing config file instead of a profile",
+    )
+    pw.set_defaults(func=_cmd_wizard)
 
     return parser
 
