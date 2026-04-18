@@ -19,7 +19,7 @@ it to every identifier token that matches (skipping tokens that follow a
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..tokenizer import (
@@ -33,7 +33,7 @@ from ..tokenizer import (
     WHITESPACE,
     Token,
 )
-from ..keywords import TYPE_LIKE, is_keyword_or_directive
+from ..keywords import TYPE_LIKE, is_keyword_or_directive, is_visual_form_base
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +73,58 @@ class ClassScope:
     """A class / record type block."""
     keyword_idx: int   # index of the `class` or `record` keyword
     end_idx: int       # index of the matching `end`
+    # Name of the class being defined, i.e. the IDENT before `=` (e.g.
+    # ``TForm1`` in ``TForm1 = class(TForm)``). ``None`` if we couldn't
+    # recover it — the scope is still valid for field collection.
+    name: str | None = None
+    # Ancestors listed inside the inheritance parens, in source order:
+    # ``class(TBase, IFoo)`` → ``["TBase", "IFoo"]``. Empty for
+    # ``class`` / ``record`` without parens, and for forward declarations.
+    # The first element (if any) is the base class; the rest are typically
+    # interfaces but we don't distinguish here.
+    ancestor_names: list[str] = field(default_factory=list)
+
+
+def _extract_class_header(
+    sig: list[tuple[int, Token]], class_kw_idx: int
+) -> tuple[str | None, list[str]]:
+    """Given the index of the ``class``/``record`` keyword that *starts* a
+    type body, recover ``(name, ancestor_names)``.
+
+    The pattern is ``TFoo = class(TBase, IFoo)``. The name is the IDENT
+    two positions before the keyword (``TFoo``, then ``=``, then ``class``).
+    Ancestors live inside the immediately-following parens, if any.
+    """
+    name: str | None = None
+    if class_kw_idx >= 2:
+        prev_eq = sig[class_kw_idx - 1][1].value
+        cand = sig[class_kw_idx - 2][1]
+        if prev_eq == "=" and cand.type == IDENT:
+            name = cand.value
+
+    ancestors: list[str] = []
+    i = class_kw_idx + 1
+    n = len(sig)
+    if i < n and sig[i][1].value == "(":
+        depth = 1
+        i += 1
+        expect_name = True
+        while i < n and depth > 0:
+            v = sig[i][1].value
+            if v == "(":
+                depth += 1
+            elif v == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif v == ",":
+                expect_name = True
+            elif depth == 1 and expect_name and sig[i][1].type in (IDENT, KEYWORD):
+                ancestors.append(sig[i][1].value)
+                expect_name = False
+            i += 1
+
+    return name, ancestors
 
 
 def _find_scopes(sig: list[tuple[int, Token]]) -> tuple[list[ClassScope], list[ProcScope]]:
@@ -104,7 +156,13 @@ def _find_scopes(sig: list[tuple[int, Token]]) -> tuple[list[ClassScope], list[P
                     continue
                 end_idx = _match_class_end(sig, i)
                 if end_idx > i:
-                    class_scopes.append(ClassScope(keyword_idx=i, end_idx=end_idx))
+                    name, ancestors = _extract_class_header(sig, i)
+                    class_scopes.append(ClassScope(
+                        keyword_idx=i,
+                        end_idx=end_idx,
+                        name=name,
+                        ancestor_names=ancestors,
+                    ))
                     i = end_idx + 1
                     continue
 
@@ -537,25 +595,72 @@ def _apply_rename(
 # ---------------------------------------------------------------------------
 
 
-def apply(tokens: list[Token], config: dict[str, Any]) -> None:
+def is_form_class(cls: ClassScope, *, has_dfm_sibling: bool = False) -> bool:
+    """True if *cls* looks like a VCL/FMX form / frame / data module.
+
+    Two signals are considered (OR):
+
+    * The class inherits (directly) from a known visual base:
+      ``TForm``/``TFrame``/``TDataModule``/``TCustomForm``.
+    * A ``has_dfm_sibling`` flag is True, meaning the caller knows the
+      ``.pas`` ships with a ``.dfm`` resource. In that case we treat every
+      class in the unit as form-like — conservative but safe: an author
+      who keeps a ``.dfm`` next to a ``.pas`` is almost certainly working
+      with a designer-backed class, and silently renaming its fields
+      would break the visual binding.
+    """
+    if has_dfm_sibling:
+        return True
+    for anc in cls.ancestor_names:
+        if is_visual_form_base(anc):
+            return True
+    return False
+
+
+def apply(
+    tokens: list[Token],
+    config: dict[str, Any],
+    *,
+    has_dfm_sibling: bool = False,
+) -> dict[str, str]:
+    """Run the rename pass and return the unit-wide field rename map.
+
+    The returned mapping is ``old_name -> new_name`` for *fields of
+    non-form classes* (the only renames that need propagating to a sibling
+    ``.dfm``). Locals never appear because they don't cross procedure
+    boundaries. Callers who don't need it can ignore the return value —
+    this stays backward-compatible with the old ``-> None`` signature.
+    """
     vp = config.get("variablePrefix", {}) or {}
     if not (
         (vp.get("local", {}) or {}).get("enabled")
         or (vp.get("classField", {}) or {}).get("enabled")
         or (vp.get("byType", {}) or {}).get("enabled")
     ):
-        return
+        return {}
 
     sig = _significant(tokens)
     if not sig:
-        return
+        return {}
 
     class_scopes, proc_scopes = _find_scopes(sig)
 
+    skip_visual = bool(vp.get("skipVisualComponents", True))
+
     # --- Collect declarations
     field_decls: list[Decl] = []
+    # Track which field names belong to form classes (for rename filtering
+    # below). Populated only when skip_visual is True.
+    form_field_names: set[str] = set()
     for cls in class_scopes:
-        field_decls.extend(_collect_class_fields(sig, cls))
+        cls_fields = _collect_class_fields(sig, cls)
+        if skip_visual and is_form_class(cls, has_dfm_sibling=has_dfm_sibling):
+            # Safety net: don't rename form fields — renaming without
+            # updating the sibling .dfm would break the visual binding.
+            for d in cls_fields:
+                form_field_names.add(d.name.lower())
+            continue
+        field_decls.extend(cls_fields)
 
     # Map (proc_index) -> list of decls
     proc_decls: list[tuple[ProcScope, list[Decl]]] = []
@@ -566,6 +671,10 @@ def apply(tokens: list[Token], config: dict[str, Any]) -> None:
     # Class fields are renamed unit-wide (referenced from methods elsewhere).
     field_map: dict[str, str] = {}
     for d in field_decls:
+        # If the same name is also a form field somewhere in the unit, skip
+        # it — renaming would touch references inside the form class too.
+        if d.name.lower() in form_field_names:
+            continue
         new = _compute_new_name(d, config)
         if new and new.lower() != d.name.lower():
             field_map[d.name] = new
@@ -583,3 +692,5 @@ def apply(tokens: list[Token], config: dict[str, Any]) -> None:
             start_tok_idx = sig[proc.header_start][0]
             end_tok_idx = sig[proc.body_end][0]
             _apply_rename(tokens, local_map, token_range=(start_tok_idx, end_tok_idx))
+
+    return field_map

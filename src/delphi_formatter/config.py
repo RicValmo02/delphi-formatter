@@ -40,6 +40,14 @@ _DEFAULT: dict[str, Any] = {
         "overrides": {},
     },
     "variablePrefix": {
+        # Safety net for VCL/FMX forms. When true (the safe default), classes
+        # that inherit from TForm/TFrame/TDataModule/TCustomForm — or whose
+        # .pas has a sibling .dfm — are left ALONE by the classField and
+        # byType rename rules. Renaming a form field silently breaks the
+        # .dfm binding unless the .dfm is updated too, so opting in should
+        # be an explicit decision. Set false to let the formatter rename form
+        # fields AND patch the sibling .dfm coherently.
+        "skipVisualComponents": True,
         "local": {
             "enabled": False,
             "prefix": "L",
@@ -225,7 +233,14 @@ def validate_config(config: dict[str, Any]) -> list[str]:
             if k in node and not isinstance(node[k], bool):
                 errors.append(f"spacing.{sub}.{k}: must be a boolean")
 
-    by_type = config.get("variablePrefix", {}).get("byType", {})
+    vp = config.get("variablePrefix", {}) or {}
+    if "skipVisualComponents" in vp and not isinstance(vp["skipVisualComponents"], bool):
+        errors.append(
+            "variablePrefix.skipVisualComponents: must be a boolean"
+            f" (got {vp['skipVisualComponents']!r})"
+        )
+
+    by_type = vp.get("byType", {})
     rules = by_type.get("rules", [])
     if not isinstance(rules, list):
         errors.append("variablePrefix.byType.rules: must be a list")
