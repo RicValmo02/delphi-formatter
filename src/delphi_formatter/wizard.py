@@ -383,6 +383,35 @@ def _section_local_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
     )
 
 
+def _section_parameter_prefix(io_: _IO, cfg: dict[str, Any]) -> None:
+    io_.writeln("\n== Parameter prefix (formal parameters of procedure/function) ==")
+    io_.writeln(
+        "  Delphi convention: parameters start with 'A' (Argument) — AValue,\n"
+        "  AIndex, ASender. Rename applies to the signature (forward AND\n"
+        "  implementation) and every use inside the body, but NEVER to the\n"
+        "  call site — a caller-side variable passed to the routine keeps its\n"
+        "  original name."
+    )
+    node = cfg["variablePrefix"].setdefault(
+        "parameter",
+        {"enabled": True, "prefix": "A", "capitalizeAfterPrefix": True},
+    )
+    node["enabled"] = _ask_yes_no(
+        io_, "Enable parameter prefixing?", bool(node.get("enabled", True))
+    )
+    if not node["enabled"]:
+        return
+    node["prefix"] = _ask_pascal_ident(
+        io_, "Prefix (Delphi convention is 'A')", str(node.get("prefix", "A"))
+    )
+    node["capitalizeAfterPrefix"] = _ask_yes_no(
+        io_,
+        "Capitalize first letter after the prefix? "
+        f"(on: '{node['prefix']}Value', off: '{node['prefix']}value')",
+        bool(node.get("capitalizeAfterPrefix", True)),
+    )
+
+
 def _ask_skip_visual_components(io_: _IO, cfg: dict[str, Any]) -> None:
     """Safety prompt for VCL form classes.
 
@@ -675,6 +704,7 @@ SECTIONS: list[tuple[str, Callable[[_IO, dict[str, Any]], None]]] = [
     ("Keyword & built-in-type case",       _section_cases),
     ("Local variable prefix",              _section_local_prefix),
     ("Class / record field prefix",        _section_field_prefix),
+    ("Parameter prefix",                   _section_parameter_prefix),
     ("Type-based prefix rules (byType)",   _section_bytype),
     ("Spacing",                            _section_spacing),
     ("Alignment",                          _section_alignment),

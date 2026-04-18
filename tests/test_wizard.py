@@ -91,17 +91,17 @@ class WizardByTypeSubloopTests(unittest.TestCase):
     """The byType sub-loop is the key user-requested feature."""
 
     def _save_exit_suffix(self) -> str:
-        # 11 = Save & exit in the main menu (10 sections + Save)
-        return "11\n"
+        # 12 = Save & exit in the main menu (11 sections + Save)
+        return "12\n"
 
     def test_add_rule_via_subloop(self) -> None:
-        # Start from Minimal, refine, go to section 5 (byType), enable,
+        # Start from Minimal, refine, go to section 6 (byType), enable,
         # keep default conflict resolution, keep skipVisualComponents at
         # its default (safe), add rule TTimer -> tmr, done, Save & exit.
         script = "\n".join([
             "1",          # Minimal profile
             "y",          # refine
-            "5",          # section: byType
+            "6",          # section: byType
             "y",          # enable
             "",           # conflictResolution default
             "",           # skipVisualComponents default (true)
@@ -109,7 +109,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "TTimer",     # typePattern
             "tmr",        # prefix
             "d",          # done with byType
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -129,14 +129,14 @@ class WizardByTypeSubloopTests(unittest.TestCase):
         script = "\n".join([
             "3",          # VCL Hungarian
             "y",          # refine
-            "5",          # byType section
+            "6",          # byType section
             "",           # keep enabled=Y default
             "",           # keep default conflictResolution
             "",           # keep skipVisualComponents default
             "r",          # remove
             "1",          # rule number 1 (TButton)
             "d",          # done
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -156,7 +156,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
         script = "\n".join([
             "1",            # Minimal
             "y",            # refine
-            "5",            # byType
+            "6",            # byType
             "y",            # enable
             "",             # default conflictResolution
             "",             # skipVisualComponents default
@@ -165,7 +165,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "TFoo",         # OK regex
             "foo",          # prefix
             "d",            # done
-            "11",           # Save & exit
+            "12",           # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -184,7 +184,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
         script = "\n".join([
             "1",          # Minimal
             "y",          # refine
-            "5",          # byType
+            "6",          # byType
             "y",          # enable
             "",           # default conflictResolution
             "",           # skipVisualComponents default
@@ -193,7 +193,7 @@ class WizardByTypeSubloopTests(unittest.TestCase):
             "123bad",     # invalid pascal ident
             "foo",        # valid
             "d",          # done
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -217,7 +217,7 @@ class WizardSkipVisualComponentsTests(unittest.TestCase):
             "",           # default prefix = 'F'
             "",           # default capitalize = yes
             "",           # skipVisualComponents default (true)
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -237,7 +237,7 @@ class WizardSkipVisualComponentsTests(unittest.TestCase):
             "",           # default prefix
             "",           # default capitalize
             "n",          # NO, don't skip form classes — we want the sync on
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -259,7 +259,7 @@ class WizardSkipVisualComponentsTests(unittest.TestCase):
             "y",          # refine
             "4",          # class-field prefix section
             "n",          # decline classField
-            "11",         # Save & exit
+            "12",         # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
@@ -270,12 +270,12 @@ class WizardSkipVisualComponentsTests(unittest.TestCase):
 
 class WizardPreviewTests(unittest.TestCase):
     def test_preview_shows_formatted_output(self) -> None:
-        # Minimal + refine + section 10 (Preview) + back to menu + Save & exit
+        # Minimal + refine + section 11 (Preview) + back to menu + Save & exit
         script = "\n".join([
             "1",        # Minimal
             "y",        # refine
-            "10",       # Preview on sample
-            "11",       # Save & exit
+            "11",       # Preview on sample
+            "12",       # Save & exit
             "",
         ])
         with tempfile.TemporaryDirectory() as td:
