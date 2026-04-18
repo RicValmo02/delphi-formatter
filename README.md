@@ -185,8 +185,14 @@ Only the keys you want to override need to appear in your config — unset
 keys inherit from the defaults.
 
 `keywords.case` accepts `"lower"`, `"upper"`, or `"preserve"`.
-`builtinTypes.case` accepts those three values **plus** `"match-keywords"`,
-which is a shortcut meaning *"use whatever `keywords.case` is set to"*.
+`builtinTypes.case` accepts those three values **plus**:
+
+- `"match-keywords"` — a shortcut meaning *"use whatever `keywords.case`
+  is set to"*.
+- `"canonical"` — emit every built-in type in its RTL-documented spelling
+  (`Integer`, `Boolean`, `TDateTime`, `PChar`, `AnsiString`, …) regardless
+  of how the author wrote it. Handy when you want the idiomatic
+  *capitalised-initial* Pascal look without listing 40+ types by hand.
 
 `builtinTypes.overrides` takes precedence over `builtinTypes.case` on a
 per-type basis. Keys are matched case-insensitively; values are the
@@ -219,6 +225,7 @@ Typical idiomatic-Delphi recipe:
 | Lowercase everything (keywords *and* `Integer`, `Boolean`, `TDateTime`, …) | `"keywords": { "case": "lower" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Same, but UPPERCASE | `"keywords": { "case": "upper" }`, `"builtinTypes": { "case": "match-keywords" }` |
 | Lowercase `string`/`char`/`real` but capital `Integer`/`Boolean`/`TDateTime` | `"builtinTypes": { "case": "lower", "overrides": { "Integer": "Integer", "Boolean": "Boolean", "TDateTime": "TDateTime" } }` |
+| **Idiomatic Pascal** — every RTL type capitalised *except* `string` in lower | `"builtinTypes": { "case": "canonical", "overrides": { "String": "string" } }` |
 | Tight declarations, loose assignments (`num:Integer` and `num := 5`) | `"spacing.declarationColon": { "spaceBefore": false, "spaceAfter": false }` + default `assignment` |
 | Roomy declarations (`num : Integer`) | `"spacing.declarationColon": { "spaceBefore": true, "spaceAfter": true }` |
 | No spaces at all around `:=` (`num:=5`) | `"spacing.assignment": { "spaceBefore": false, "spaceAfter": false }` |

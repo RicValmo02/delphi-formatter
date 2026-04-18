@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..tokenizer import KEYWORD, IDENT, Token
-from ..keywords import DIRECTIVES, is_builtin_type
+from ..keywords import DIRECTIVES, is_builtin_type, canonical_builtin_spelling
 
 
 def _apply_case(word: str, mode: str) -> str:
@@ -39,7 +39,11 @@ def apply(tokens: list[Token], config: dict[str, Any]) -> None:
     }
 
     # Early-out only if nothing can actually change the output.
-    if kw_mode == "preserve" and bt_mode == "preserve" and not bt_overrides:
+    if (
+        kw_mode == "preserve"
+        and bt_mode == "preserve"
+        and not bt_overrides
+    ):
         return
 
     def _emit_builtin(raw: str) -> str:
@@ -49,6 +53,12 @@ def apply(tokens: list[Token], config: dict[str, Any]) -> None:
             return override
         if bt_mode == "preserve":
             return raw
+        if bt_mode == "canonical":
+            # Emit the RTL-documented spelling (Integer, Boolean, TDateTime,
+            # PChar, ...). Falls back to the original token if we don't have
+            # a canonical entry for it (shouldn't happen for known built-ins).
+            canonical = canonical_builtin_spelling(raw)
+            return canonical if canonical is not None else raw
         return _apply_case(raw, bt_mode)
 
     for tok in tokens:

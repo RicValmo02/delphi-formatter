@@ -262,13 +262,18 @@ def _section_cases(io_: _IO, cfg: dict[str, Any]) -> None:
         io_, "Keyword case (begin, end, procedure, ...):",
         kw_opts, cfg["keywords"].get("case", "lower"),
     )
-    # Built-in types additionally support 'match-keywords' so the user can
-    # keep 'String', 'Integer', 'Boolean', TDateTime, ... in lock-step with
-    # whatever was chosen above without having to repeat it.
-    bt_opts = ["lower", "upper", "preserve", "match-keywords"]
+    # Built-in types have two extra modes on top of lower/upper/preserve:
+    #   * 'match-keywords' -> follow whatever 'keywords.case' was set to
+    #   * 'canonical'      -> use the RTL-documented spelling (Integer,
+    #                         Boolean, TDateTime, PChar, ...) regardless of
+    #                         how the author wrote it
+    bt_opts = ["lower", "upper", "preserve", "match-keywords", "canonical"]
     io_.writeln(
-        "  tip: pick 'match-keywords' to keep built-in types in sync with "
-        "the keyword case above"
+        "  tips:\n"
+        "    - 'match-keywords' keeps built-in types in sync with the "
+        "keyword case\n"
+        "    - 'canonical' emits each type in its RTL form "
+        "(Integer, Boolean, TDateTime, PChar, ...)"
     )
     cfg["builtinTypes"]["case"] = _ask_choice(
         io_, "Built-in type case (Integer, String, Boolean, TDateTime, ...):",

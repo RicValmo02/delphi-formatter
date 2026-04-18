@@ -32,18 +32,56 @@ DIRECTIVES: frozenset[str] = frozenset({
     "writeonly", "winapi",
 })
 
+# Built-in simple/generic types with their canonical (RTL-documented)
+# spelling. Used by ``builtinTypes.case = "canonical"`` to render each type
+# in the form the Embarcadero docs use, *regardless* of how the author
+# originally wrote it. Keys are lowercased for O(1) case-insensitive lookup.
+BUILTIN_TYPES_CANONICAL: dict[str, str] = {
+    "integer":       "Integer",
+    "cardinal":      "Cardinal",
+    "shortint":      "ShortInt",
+    "smallint":      "SmallInt",
+    "longint":       "LongInt",
+    "int64":         "Int64",
+    "uint64":        "UInt64",
+    "byte":          "Byte",
+    "word":          "Word",
+    "longword":      "LongWord",
+    "nativeint":     "NativeInt",
+    "nativeuint":    "NativeUInt",
+    "single":        "Single",
+    "double":        "Double",
+    "extended":      "Extended",
+    "real":          "Real",
+    "real48":        "Real48",
+    "currency":      "Currency",
+    "comp":          "Comp",
+    "boolean":       "Boolean",
+    "bytebool":      "ByteBool",
+    "wordbool":      "WordBool",
+    "longbool":      "LongBool",
+    "char":          "Char",
+    "ansichar":      "AnsiChar",
+    "widechar":      "WideChar",
+    "string":        "String",
+    "ansistring":    "AnsiString",
+    "widestring":    "WideString",
+    "unicodestring": "UnicodeString",
+    "shortstring":   "ShortString",
+    "pchar":         "PChar",
+    "pansichar":     "PAnsiChar",
+    "pwidechar":     "PWideChar",
+    "pointer":       "Pointer",
+    "variant":       "Variant",
+    "olevariant":    "OleVariant",
+    "tdatetime":     "TDateTime",
+    "tdate":         "TDate",
+    "ttime":         "TTime",
+    "tobject":       "TObject",
+}
+
 # Built-in simple/generic types — case policy configurable separately.
-BUILTIN_TYPES: frozenset[str] = frozenset({
-    "integer", "cardinal", "shortint", "smallint", "longint", "int64",
-    "uint64", "byte", "word", "longword", "nativeint", "nativeuint",
-    "single", "double", "extended", "real", "real48", "currency", "comp",
-    "boolean", "bytebool", "wordbool", "longbool",
-    "char", "ansichar", "widechar",
-    "string", "ansistring", "widestring", "unicodestring", "shortstring",
-    "pchar", "pansichar", "pwidechar",
-    "pointer", "variant", "olevariant", "tdatetime", "tdate", "ttime",
-    "tobject",
-})
+BUILTIN_TYPES: frozenset[str] = frozenset(BUILTIN_TYPES_CANONICAL.keys())
 
 # Words that, when used as the *type* in a variable declaration, should be
 # left untouched by the identifier-rename pass even if they happen to match
@@ -67,6 +105,11 @@ def is_directive(word: str) -> bool:
 
 def is_builtin_type(word: str) -> bool:
     return word.lower() in BUILTIN_TYPES
+
+
+def canonical_builtin_spelling(word: str) -> str | None:
+    """Return the canonical RTL spelling of *word*, or None if unknown."""
+    return BUILTIN_TYPES_CANONICAL.get(word.lower())
 
 
 def is_keyword_or_directive(word: str) -> bool:

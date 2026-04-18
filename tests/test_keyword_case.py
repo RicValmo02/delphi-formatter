@@ -129,6 +129,69 @@ class MatchKeywordsTests(unittest.TestCase):
         )
 
 
+class CanonicalBuiltinTypeTests(unittest.TestCase):
+    """`builtinTypes.case = "canonical"` emits the RTL-documented spelling."""
+
+    def _quiet(self) -> dict:
+        cfg = default_config()
+        cfg["keywords"]["case"] = "lower"
+        cfg["spacing"]["aroundOperators"] = False
+        cfg["spacing"]["afterComma"] = False
+        cfg["alignment"]["alignVarColons"] = False
+        cfg["variablePrefix"]["local"]["enabled"] = False
+        cfg["variablePrefix"]["classField"]["enabled"] = False
+        cfg["variablePrefix"]["byType"]["enabled"] = False
+        return cfg
+
+    def test_canonical_capitalizes_common_types(self) -> None:
+        cfg = self._quiet()
+        cfg["builtinTypes"]["case"] = "canonical"
+        src = (
+            "var a: integer; b: boolean; c: tdatetime; "
+            "d: PCHAR; e: STRING; f: cardinal;"
+        )
+        out = format_source(src, cfg)
+        self.assertIn("Integer", out)
+        self.assertIn("Boolean", out)
+        self.assertIn("TDateTime", out)
+        self.assertIn("PChar", out)
+        self.assertIn("String", out)
+        self.assertIn("Cardinal", out)
+        # No stray all-caps survivors.
+        self.assertNotIn("INTEGER", out)
+        self.assertNotIn("STRING", out)
+        self.assertNotIn("PCHAR", out)
+
+    def test_canonical_preserves_keyword_setting(self) -> None:
+        """Keywords follow their own setting; canonical only affects types."""
+        cfg = self._quiet()
+        cfg["keywords"]["case"] = "upper"
+        cfg["builtinTypes"]["case"] = "canonical"
+        src = "var x: integer;"
+        out = format_source(src, cfg)
+        self.assertIn("VAR", out)
+        self.assertIn("Integer", out)
+
+    def test_canonical_with_string_override(self) -> None:
+        """The user's actual request: canonical + string->lower override."""
+        cfg = self._quiet()
+        cfg["builtinTypes"]["case"] = "canonical"
+        cfg["builtinTypes"]["overrides"] = {"String": "string"}
+        src = "var a: INTEGER; b: BOOLEAN; c: TDATETIME; d: STRING;"
+        out = format_source(src, cfg)
+        self.assertIn("Integer", out)
+        self.assertIn("Boolean", out)
+        self.assertIn("TDateTime", out)
+        self.assertIn("string", out)
+        self.assertNotIn("String ", out)
+        self.assertNotIn("STRING", out)
+
+    def test_validator_accepts_canonical(self) -> None:
+        cfg = default_config()
+        cfg["builtinTypes"]["case"] = "canonical"
+        self.assertEqual(validate_config(cfg), [])
+
+
 class BuiltinTypeOverridesTests(unittest.TestCase):
     """`builtinTypes.overrides` pins individual types regardless of `case`."""
 

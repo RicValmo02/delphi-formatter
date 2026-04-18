@@ -22,10 +22,14 @@ _DEFAULT: dict[str, Any] = {
         "case": "lower",            # "lower" | "upper" | "preserve"
     },
     "builtinTypes": {
-        # "lower" | "upper" | "preserve" | "match-keywords"
+        # "lower" | "upper" | "preserve" | "match-keywords" | "canonical"
         # "match-keywords" follows whatever 'keywords.case' is set to, so
         # 'String', 'Integer', 'Boolean', ... stay in sync with 'begin', 'if',
         # 'procedure', ... without having to configure the same value twice.
+        # "canonical" emits each built-in type in its documented RTL form
+        # ('Integer', 'Boolean', 'TDateTime', 'PChar', ...) regardless of how
+        # the author wrote it. Combine with an entry in 'overrides' to pin
+        # any single type differently (e.g. 'String' -> 'string').
         "case": "preserve",
         # Per-type overrides. Keys are matched case-insensitively against the
         # built-in type name; values are the *literal* form the token will be
@@ -166,7 +170,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         _check_case(
             "builtinTypes.case",
             config["builtinTypes"]["case"],
-            extra=("match-keywords",),
+            extra=("match-keywords", "canonical"),
         )
 
     overrides = config.get("builtinTypes", {}).get("overrides")
